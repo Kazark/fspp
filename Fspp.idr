@@ -15,13 +15,39 @@ space x y =
     False => Nothing
     True => Just (x + 1)
 
-parseHeader : List Char -> Maybe MacroHeaderTok
-parseHeader ('/' :: '/' :: '#' :: 'd' :: 'e' :: 'f' :: ' ' :: xs) = ?parseHeader_rhs_2
-parseHeader _ = Nothing
+parseHeader : Nat -> List Char -> Maybe MacroHeaderTok
+parseHeader x ('/' :: '/' :: '#' :: 'd' :: 'e' :: 'f' :: 'i' :: 'n' :: 'e' :: ' ' :: cs) =
+  case words $ pack cs of
+    [] => Nothing
+    name :: args => Just $ MHTok x name args
+parseHeader _ _ = Nothing
 
-parse : Nat -> List Char -> Maybe MacroHeaderTok
-parse x [] = Nothing
-parse x (c :: cs) =
+parseHeaderTok' : Nat -> List Char -> Maybe MacroHeaderTok
+parseHeaderTok' x [] = Nothing
+parseHeaderTok' x (c :: cs) =
   case space x c of
-    Nothing => ?asdf
-    Just x => parse x cs
+    Nothing => parseHeader x (c :: cs)
+    Just x => parseHeaderTok' x cs
+
+parseHeaderTok : String -> Maybe MacroHeaderTok
+parseHeaderTok = parseHeaderTok' 0 . unpack
+
+parseFooter : String -> Bool
+parseFooter = (==) "//#enddef" . trim
+
+record MacroDef where
+  constructor Define
+  name : string
+  args : List String
+  body : List String
+
+data ParseOneState
+  = NeedDefine
+  | NeedDef MacroHeaderTok (List String)
+
+ParseState : Type
+ParseState = (ParseOneState, List MacroDef)
+
+parseMacroDefs' : List String -> List MacroDef
+
+parseMacroDefs : List String -> List MacroDef
