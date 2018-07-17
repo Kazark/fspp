@@ -37,17 +37,28 @@ parseFooter = (==) "//#enddef" . trim
 
 record MacroDef where
   constructor Define
-  name : string
+  name : String
   args : List String
   body : List String
 
 data ParseOneState
   = NeedDefine
-  | NeedDef MacroHeaderTok (List String)
+  | NeedEndDef MacroHeaderTok (List String)
 
 ParseState : Type
 ParseState = (ParseOneState, List MacroDef)
 
-parseMacroDefs' : List String -> List MacroDef
+parseMacroDefs' : ParseState -> List String -> List MacroDef
+parseMacroDefs' (NeedDefine, macros) [] = macros
+parseMacroDefs' (NeedDefine, macros) (x :: xs) =
+  case parseHeaderTok x of
+    Nothing => parseMacroDefs' (NeedDefine, macros) xs
+    Just hd => parseMacroDefs' (NeedEndDef hd [], macros) xs
+parseMacroDefs' (NeedEndDef _ _, macros) [] = macros
+parseMacroDefs' (NeedEndDef header body, macros) (x :: xs) =
+  case parseFooter x of
+    False => parseMacroDefs' (NeedEndDef header (x :: body), macros) xs
+    True  => parseMacroDefs' (NeedDefine, Define (name header) (args header) body :: macros) xs
 
 parseMacroDefs : List String -> List MacroDef
+parseMacroDefs = parseMacroDefs' (NeedDefine, [])
