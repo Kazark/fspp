@@ -11,31 +11,42 @@ record MacroHeaderTok where
 
 space : Nat -> Char -> Maybe Nat
 space x y =
-  case isSpace y of
-    False => Nothing
-    True => Just (x + 1)
+  if isSpace y
+  then Just (x + 1)
+  else Nothing
 
-parseHeader : Nat -> List Char -> Maybe MacroHeaderTok
-parseHeader x ('/' :: '/' :: '#' :: 'd' :: 'e' :: 'f' :: 'i' :: 'n' :: 'e' :: ' ' :: cs) =
-  case words $ pack cs of
-    [] => Nothing
-    name :: args => Just $ MHTok x name args
-parseHeader _ _ = Nothing
+startsWith : List Char -> List Char -> Maybe (List Char)
+startsWith [] [] = Just []
+startsWith [] (x :: xs) = Just (x :: xs)
+startsWith (y :: xs) [] = Nothing
+startsWith (y :: xs) (x :: ys) =
+  if y == x
+  then startsWith xs ys
+  else Nothing
 
-parseHeaderTok' : Nat -> List Char -> Maybe MacroHeaderTok
-parseHeaderTok' x [] = Nothing
-parseHeaderTok' x (c :: cs) =
+parseHeaderWith : String -> Nat -> List Char -> Maybe MacroHeaderTok
+parseHeaderWith kw x ('/' :: '/' :: '#' :: cs) =
+  startsWith (unpack kw) cs
+  >>= \cs' =>
+    case words $ pack cs' of
+      [] => Nothing
+      name :: args => Just $ MHTok x name args
+parseHeaderWith _ _ _ = Nothing
+
+parseHeaderTok' : String -> Nat -> List Char -> Maybe MacroHeaderTok
+parseHeaderTok' _ x [] = Nothing
+parseHeaderTok' kw x (c :: cs) =
   case space x c of
-    Nothing => parseHeader x (c :: cs)
-    Just x => parseHeaderTok' x cs
+    Nothing => parseHeaderWith kw x (c :: cs)
+    Just x => parseHeaderTok' kw x cs
 
-parseHeaderTok : String -> Maybe MacroHeaderTok
-parseHeaderTok = parseHeaderTok' 0 . unpack
+parseHeaderTok : String -> String -> Maybe MacroHeaderTok
+parseHeaderTok kw = parseHeaderTok' kw 0 . unpack
 
 parseFooter : String -> Bool
 parseFooter = (==) "//#enddef" . trim
 
-record MacroDef where
+record Macro where
   constructor Define
   name : String
   args : List String
@@ -46,19 +57,25 @@ data ParseOneState
   | NeedEndDef MacroHeaderTok (List String)
 
 ParseState : Type
-ParseState = (ParseOneState, List MacroDef)
+ParseState = (ParseOneState, List Macro)
 
-parseMacroDefs' : ParseState -> List String -> List MacroDef
-parseMacroDefs' (NeedDefine, macros) [] = macros
-parseMacroDefs' (NeedDefine, macros) (x :: xs) =
-  case parseHeaderTok x of
-    Nothing => parseMacroDefs' (NeedDefine, macros) xs
-    Just hd => parseMacroDefs' (NeedEndDef hd [], macros) xs
-parseMacroDefs' (NeedEndDef _ _, macros) [] = macros
-parseMacroDefs' (NeedEndDef header body, macros) (x :: xs) =
+parseMacros' : String -> ParseState -> List String -> List Macro
+parseMacros' _ (NeedDefine, macros) [] = macros
+parseMacros' kw (NeedDefine, macros) (x :: xs) =
+  case parseHeaderTok kw x of
+    Nothing => parseMacros' kw (NeedDefine, macros) xs
+    Just hd => parseMacros' kw (NeedEndDef hd [], macros) xs
+parseMacros' _ (NeedEndDef _ _, macros) [] = macros
+parseMacros' kw (NeedEndDef header body, macros) (x :: xs) =
   case parseFooter x of
-    False => parseMacroDefs' (NeedEndDef header (x :: body), macros) xs
-    True  => parseMacroDefs' (NeedDefine, Define (name header) (args header) body :: macros) xs
+    False => parseMacros' kw (NeedEndDef header (x :: body), macros) xs
+    True  => parseMacros' kw (NeedDefine, Define (name header) (args header) body :: macros) xs
 
-parseMacroDefs : List String -> List MacroDef
-parseMacroDefs = parseMacroDefs' (NeedDefine, [])
+parseMacrosWith : String -> List String -> List Macro
+parseMacrosWith kw = parseMacros' kw (NeedDefine, [])
+
+parseMacrosDefine : List String -> List Macro
+parseMacrosDefine = parseMacrosWith "define"
+
+parseMacrosInvoke : List String -> List Macro
+parseMacrosInvoke = parseMacrosWith "invoke"
