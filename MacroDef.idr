@@ -8,7 +8,7 @@ import Tokenizer
 record MacroDef where
   constructor Define
   name : String
-  args : List String
+  params : List String
   body : List String
 
 data ParseOneState
@@ -26,9 +26,9 @@ parseMacroDefs' (NeedBegin, macros) (x :: xs) =
     Just hd => parseMacroDefs' (NeedEnd hd [], macros) xs
 parseMacroDefs' (NeedEnd _ _, macros) [] = macros
 parseMacroDefs' (NeedEnd header body, macros) (x :: xs) =
-  case parseFooter x of
+  case parseFooter "def" x of
     False => parseMacroDefs' (NeedEnd header (x :: body), macros) xs
-    True  => parseMacroDefs' (NeedBegin, Define (name header) (args header) body :: macros) xs
+    True  => parseMacroDefs' (NeedBegin, Define (name header) (params header) body :: macros) xs
 
 parseMacroDefs : List String -> List MacroDef
 parseMacroDefs = parseMacroDefs' (NeedBegin, [])

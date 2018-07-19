@@ -7,7 +7,7 @@ record MacroHeader where
   constructor MacroH
   indent : Nat
   name : String
-  args : List String
+  params : List String
 
 space : Nat -> Char -> Maybe Nat
 space x y =
@@ -30,7 +30,7 @@ parseHeaderWith kw x ('/' :: '/' :: '#' :: cs) =
   >>= \cs' =>
     case words $ pack cs' of
     [] => Nothing
-    name :: args => Just $ MacroH x name args
+    name :: params => Just $ MacroH x name params
 parseHeaderWith _ _ _ = Nothing
 
 parseHeaderTok' : String -> Nat -> List Char -> Maybe MacroHeader
@@ -43,5 +43,5 @@ parseHeaderTok' kw x (c :: cs) =
 parseHeaderTok : String -> String -> Maybe MacroHeader
 parseHeaderTok kw = parseHeaderTok' kw 0 . unpack
 
-parseFooter : String -> Bool
-parseFooter = (==) "//#enddef" . trim
+parseFooter : String -> String -> Bool
+parseFooter x = (==) ("//#end" ++ x) . trim
