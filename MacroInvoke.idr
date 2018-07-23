@@ -15,8 +15,12 @@ record MacroInv (def : MacroDef) where
   indent : Nat
   args : Vect (arity def) String
 
+strReplace : String -> String -> String -> String
+strReplace x y z = ?strReplace_rhs
+
 macroInv : (def : MacroDef) -> MacroHeader -> Maybe (MacroInv def)
-macroInv (Define _ params body) (MacroH indent name args) = ?macroInv_rhs_2
+macroInv def (MacroH indent _ args) with (arity def == length args) | False = Nothing
+macroInv def (MacroH indent _ args) with (arity def == length args) | True  = Just $ Invoke indent $ replace Refl $ fromList args
 
 data State
   = Outside
