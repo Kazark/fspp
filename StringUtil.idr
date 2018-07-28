@@ -1,40 +1,72 @@
+||| Why do we have to do this?
+||| https://stackoverflow.com/q/51529100/834176
 module StringUtil
 
 %default total
+%access public export
 
-spanList : (List a -> Bool) -> List a -> (List a, List a)
-spanList _ [] = ([],[])
-spanList func list@(x::xs) =
-  if func list
-  then
-    let (ys,zs) = spanList func xs
-    in (x::ys,zs)
-  else ([],list)
-  
-breakList : (List a -> Bool) -> List a -> (List a, List a)
-breakList func = spanList (not . func)
+data Break = Brk
+data Chunk a
+  = OpenCh (List a)
+  | Sealed (List a)
 
--- Hats off to https://hackage.haskell.org/package/MissingH-1.2.0.0/docs/src/Data-List-Utils.html#replace
-partial
-split : Eq a => List a -> List a -> List (List a)
-split _ [] = []
-split delim str =
-  let (firstline, remainder) = breakList (isPrefixOf delim) str in
-  firstline :: case remainder of
-                    [] => []
-                    x => if x == delim
-                         then [] :: []
-                         else split delim (drop (length delim) x)
+chunkCtr : Maybe Break -> List a -> Chunk a
+chunkCtr Nothing    = OpenCh
+chunkCtr (Just Brk) = Sealed
 
--- One wonders if this is horribly inefficient... it is odd that since Idris
--- uses primitive strings it does not have basic primitive string functions like
--- replace
+extractChunk : Chunk a -> List a
+extractChunk (OpenCh l) = l
+extractChunk (Sealed l) = l
+
+mutual
+  onMatch : Eq a => (delim : List a)    -> {auto dprf : NonEmpty delim   }
+                 -> (matching : List a) -> {auto mprf : NonEmpty matching}
+                 -> (l : List a) -> {auto lprf : NonEmpty l}
+                 -> List (Chunk a)
+  onMatch delim (_::m') list@(x::xs) =
+    case m' of
+      []       => split' delim delim (Just Brk) xs
+      (m_::ms) => split' delim (m_ :: ms) Nothing xs
+
+  specialCons : Maybe Break -> a -> List (Chunk a) -> List (Chunk a)
+  specialCons _ x [] = [OpenCh [x]]
+  specialCons maybeBreak x ((OpenCh y) :: ys) = (chunkCtr maybeBreak (x :: y)) :: ys
+  specialCons _ x tail@((Sealed _) :: _) = (OpenCh [x]) :: tail
+
+  noMatch : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
+                 -> Maybe Break
+                 -> (l : List a) -> {auto lprf : NonEmpty l}
+                 -> List (Chunk a)
+  noMatch delim maybeBreak (x::xs) =
+    specialCons maybeBreak x $ split' delim delim Nothing xs
+
+  split' : Eq a => (delim : List a)    -> {auto dprf : NonEmpty delim   }
+                -> (matching : List a) -> {auto mprf : NonEmpty matching}
+                -> Maybe Break -> List a -> List (Chunk a)
+  split' _ _ _ [] = []
+  split' delim m maybeBreak list@(_::_) =
+    if isPrefixOf m list
+    then onMatch delim m list
+    else noMatch delim maybeBreak list
+
+split : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
+             -> List a -> List (List a)
+split delim = map extractChunk . split' delim delim Nothing
+
+||| One wonders if this is horribly inefficient... it is odd that since Idris
+||| uses primitive strings it does not have basic primitive string functions like
+||| replace
 partial
 strReplace : String -> String -> String -> String
 strReplace needle replacement =
-  pack . intercalate (unpack replacement) . split (unpack needle) . unpack
+  case unpack needle of
+    [] => id
+    (n :: ns) => pack . intercalate (unpack replacement) . split (n :: ns) . unpack
 
 lenEq : (l : List a) -> (m : List b) -> Maybe (length l = length m)
 lenEq [] [] = Just Refl
 lenEq (x :: xs) (y :: ys) = map cong $ lenEq xs ys
 lenEq _ _ = Nothing
+
+test : List (List Char)
+test = split [' ', 'b'] $ unpack "foo bar baz qux"
