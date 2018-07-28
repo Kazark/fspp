@@ -18,32 +18,31 @@ extractChunk : Chunk a -> List a
 extractChunk (OpenCh l) = l
 extractChunk (Sealed l) = l
 
-mutual
-  break : List a -> Maybe Break
-  break [] = Just Brk
-  break (_ :: _) = Nothing
+break : List a -> Maybe Break
+break [] = Just Brk
+break (_ :: _) = Nothing
 
-  fullOrFill : Eq a => (m : List a) -> {auto prf : NonEmpty m}
-                    -> List a -> (l : List a ** NonEmpty l)
-  fullOrFill m {prf} [] = (m ** prf)
-  fullOrFill _ (x :: xs) = (x :: xs ** IsNonEmpty)
+fullOrFill : Eq a => (m : List a) -> {auto prf : NonEmpty m}
+                  -> List a -> (l : List a ** NonEmpty l)
+fullOrFill m {prf} [] = (m ** prf)
+fullOrFill _ (x :: xs) = (x :: xs ** IsNonEmpty)
 
-  specialCons : (List a -> Chunk a) -> a -> List (Chunk a) -> List (Chunk a)
-  specialCons ctr x [] = [ctr [x]]
-  specialCons ctr x ((OpenCh y) :: ys) = ctr (x :: y) :: ys
-  specialCons _ x tail@((Sealed _) :: _) = OpenCh [x] :: tail
+specialCons : (List a -> Chunk a) -> a -> List (Chunk a) -> List (Chunk a)
+specialCons ctr x [] = [ctr [x]]
+specialCons ctr x ((OpenCh y) :: ys) = ctr (x :: y) :: ys
+specialCons _ x tail@((Sealed _) :: _) = OpenCh [x] :: tail
 
-  split' : Eq a => (delim : List a)    -> {auto dprf : NonEmpty delim   }
-                -> (matching : List a) -> {auto mprf : NonEmpty matching}
-                -> Maybe Break -> List a -> List (Chunk a)
-  split' _ _ _ [] = []
-  split' delim m@(_::m') maybeBreak list@(x::xs) =
-    if isPrefixOf m list
-    then
-      let brk = break m' in
-      let (newM ** _) = fullOrFill delim m' in
-      split' delim newM brk xs
-    else specialCons (chunkCtr maybeBreak) x $ split' delim delim Nothing xs
+split' : Eq a => (delim : List a)    -> {auto dprf : NonEmpty delim   }
+              -> (matching : List a) -> {auto mprf : NonEmpty matching}
+              -> Maybe Break -> List a -> List (Chunk a)
+split' _ _ _ [] = []
+split' delim m@(_::m') maybeBreak list@(x::xs) =
+  if isPrefixOf m list
+  then
+    let brk = break m' in
+    let (newM ** _) = fullOrFill delim m' in
+    split' delim newM brk xs
+  else specialCons (chunkCtr maybeBreak) x $ split' delim delim Nothing xs
 
 split : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
              -> List a -> List (List a)
