@@ -19,35 +19,31 @@ extractChunk (OpenCh l) = l
 extractChunk (Sealed l) = l
 
 mutual
-  onMatch : Eq a => (delim : List a)    -> {auto dprf : NonEmpty delim   }
-                 -> (matching : List a) -> {auto mprf : NonEmpty matching}
-                 -> (l : List a) -> {auto lprf : NonEmpty l}
-                 -> List (Chunk a)
-  onMatch delim (_::m') list@(x::xs) =
-    case m' of
-      []       => split' delim delim (Just Brk) xs
-      (m_::ms) => split' delim (m_ :: ms) Nothing xs
+  break : List a -> Maybe Break
+  break [] = Just Brk
+  break (_ :: _) = Nothing
 
-  specialCons : Maybe Break -> a -> List (Chunk a) -> List (Chunk a)
-  specialCons _ x [] = [OpenCh [x]]
-  specialCons maybeBreak x ((OpenCh y) :: ys) = (chunkCtr maybeBreak (x :: y)) :: ys
-  specialCons _ x tail@((Sealed _) :: _) = (OpenCh [x]) :: tail
+  fullOrFill : Eq a => (m : List a) -> {auto prf : NonEmpty m}
+                    -> List a -> (l : List a ** NonEmpty l)
+  fullOrFill m {prf} [] = (m ** prf)
+  fullOrFill _ (x :: xs) = (x :: xs ** IsNonEmpty)
 
-  noMatch : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
-                 -> Maybe Break
-                 -> (l : List a) -> {auto lprf : NonEmpty l}
-                 -> List (Chunk a)
-  noMatch delim maybeBreak (x::xs) =
-    specialCons maybeBreak x $ split' delim delim Nothing xs
+  specialCons : (List a -> Chunk a) -> a -> List (Chunk a) -> List (Chunk a)
+  specialCons ctr x [] = [ctr [x]]
+  specialCons ctr x ((OpenCh y) :: ys) = ctr (x :: y) :: ys
+  specialCons _ x tail@((Sealed _) :: _) = OpenCh [x] :: tail
 
   split' : Eq a => (delim : List a)    -> {auto dprf : NonEmpty delim   }
                 -> (matching : List a) -> {auto mprf : NonEmpty matching}
                 -> Maybe Break -> List a -> List (Chunk a)
   split' _ _ _ [] = []
-  split' delim m maybeBreak list@(_::_) =
+  split' delim m@(_::m') maybeBreak list@(x::xs) =
     if isPrefixOf m list
-    then onMatch delim m list
-    else noMatch delim maybeBreak list
+    then
+      let brk = break m' in
+      let (newM ** _) = fullOrFill delim m' in
+      split' delim newM brk xs
+    else specialCons (chunkCtr maybeBreak) x $ split' delim delim Nothing xs
 
 split : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
              -> List a -> List (List a)
@@ -68,5 +64,11 @@ lenEq [] [] = Just Refl
 lenEq (x :: xs) (y :: ys) = map cong $ lenEq xs ys
 lenEq _ _ = Nothing
 
-test : List (List Char)
-test = split [' ', 'b'] $ unpack "foo bar baz qux"
+tests : List (List (List Char))
+tests =
+  [ split [' ', 'b']      $ unpack "foo bar baz qux"
+  , split [' ']           $ unpack "foo bar baz qux"
+  , split ['x']           $ unpack "foo bar baz qux"
+  , split ['u']           $ unpack "foo bar baz qux"
+  , split ['r', ' ', 'b'] $ unpack "foo bar baz qux"
+  ]
