@@ -6,17 +6,6 @@ module StringUtil
 %access public export
 
 data Break = Brk
-data Chunk a
-  = OpenCh (List a)
-  | Sealed (List a)
-
-chunkCtr : Maybe Break -> List a -> Chunk a
-chunkCtr Nothing    = OpenCh
-chunkCtr (Just Brk) = Sealed
-
-extractChunk : Chunk a -> List a
-extractChunk (OpenCh l) = l
-extractChunk (Sealed l) = l
 
 break : List a -> Maybe Break
 break [] = Just Brk
@@ -27,26 +16,27 @@ fullOrFill : Eq a => (m : List a) -> {auto prf : NonEmpty m}
 fullOrFill m {prf} [] = (m ** prf)
 fullOrFill _ (x :: xs) = (x :: xs ** IsNonEmpty)
 
-specialCons : (List a -> Chunk a) -> a -> List (Chunk a) -> List (Chunk a)
-specialCons ctr x [] = [ctr [x]]
-specialCons ctr x ((OpenCh y) :: ys) = ctr (x :: y) :: ys
-specialCons _ x tail@((Sealed _) :: _) = OpenCh [x] :: tail
+onBreak : Break -> (List a, List (List a)) -> (List a, List (List a))
+onBreak Brk (l, ls) = ([], l :: ls)
 
 split' : Eq a => (delim : List a)    -> {auto dprf : NonEmpty delim   }
               -> (matching : List a) -> {auto mprf : NonEmpty matching}
-              -> Maybe Break -> List a -> List (Chunk a)
-split' _ _ _ [] = []
+              -> Maybe Break -> List a -> (List a, List (List a))
+split' _ _ _ [] = ([], [])
 split' delim m@(_::m') maybeBreak list@(x::xs) =
   if isPrefixOf m list
   then
     let brk = break m' in
     let (newM ** _) = fullOrFill delim m' in
     split' delim newM brk xs
-  else specialCons (chunkCtr maybeBreak) x $ split' delim delim Nothing xs
+  else
+    let (l, ls) = split' delim delim Nothing xs in
+    foldr onBreak (x :: l, ls) maybeBreak
 
 split : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
              -> List a -> List (List a)
-split delim = map extractChunk . split' delim delim Nothing
+split delim [] = []
+split delim list@(_::_) = uncurry (::) $ split' delim delim Nothing list
 
 ||| One wonders if this is horribly inefficient... it is odd that since Idris
 ||| uses primitive strings it does not have basic primitive string functions like
@@ -63,11 +53,18 @@ lenEq [] [] = Just Refl
 lenEq (x :: xs) (y :: ys) = map cong $ lenEq xs ys
 lenEq _ _ = Nothing
 
-tests : List (List (List Char))
-tests =
-  [ split [' ', 'b']      $ unpack "foo bar baz qux"
-  , split [' ']           $ unpack "foo bar baz qux"
-  , split ['x']           $ unpack "foo bar baz qux"
-  , split ['u']           $ unpack "foo bar baz qux"
-  , split ['r', ' ', 'b'] $ unpack "foo bar baz qux"
+testData : List (String, String, String)
+testData =
+  [ (" b", "_a", "foo bar baz qux")
+  , (" ", "-", "foo bar baz qux")
+  , ("x", "y", "foo bar baz qux")
+  , ("u", "vv", "foo bar baz qux")
+  , ("r b", "x", "foo bar baz qux")
+  , ("foo", "oof", "foo bar baz qux")
+  , ("oo", "||", "foo bar baz qux")
+  , ("r b", "bah", "")
+  , ("", "", "bah")
   ]
+
+test : List String
+test = map (\(x, y, z) => strReplace x y z) testData
