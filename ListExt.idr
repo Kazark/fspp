@@ -3,30 +3,34 @@
 module ListExt
 
 %default total
-%access public export
 
-splitOnL' : Eq a => (delim : List a)    -> {auto dprf : NonEmpty delim   }
-              -> (matching : List a) -> {auto mprf : NonEmpty matching}
-              -> List a -> (List a, List (List a))
-splitOnL' _ _ [] = ([], [])
-splitOnL' delim m@(_::m') list@(x::xs) =
-  if isPrefixOf m list
-  then
-    case m' of
-      [] => ([], uncurry (::) $ splitOnL' delim delim xs)
-      (m_ :: ms) => splitOnL' delim (m_ :: ms) xs
-  else
-    let (l, ls) = splitOnL' delim delim xs in
-    (x :: l, ls)
+mutual
+  private
+  dropSublist : Eq a => (delim : List a) -> {auto prf : NonEmpty delim}
+                     -> List a -> List a -> (List a, List (List a))
+  dropSublist _ _ [] = ([], [])
+  dropSublist delim [] xs = ([], uncurry (::) $ splitOnSublist' delim xs)
+  dropSublist delim (_ :: ys) (_ :: xs) = dropSublist delim ys xs
 
-splitOnL : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
+  private
+  splitOnSublist' : Eq a => (delim : List a) -> {auto prf : NonEmpty delim}
+                         -> List a -> (List a, List (List a))
+  splitOnSublist' _ [] = ([], [])
+  splitOnSublist' delim list@(x::xs) =
+    if isPrefixOf delim list
+    then dropSublist delim delim list
+    else
+      let (l, ls) = splitOnSublist' delim xs in
+      (x :: l, ls)
+
+splitOnSublist : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
              -> List a -> List (List a)
-splitOnL delim [] = []
-splitOnL delim list@(_::_) = uncurry (::) $ splitOnL' delim delim list
+splitOnSublist delim [] = []
+splitOnSublist delim list@(_::_) = uncurry (::) $ splitOnSublist' delim list
 
 substitute : Eq a => List a -> List a -> List a -> List a
 substitute [] replacement = id
-substitute (n :: ns) replacement = intercalate replacement . splitOnL (n :: ns)
+substitute (n :: ns) replacement = intercalate replacement . splitOnSublist (n :: ns)
 
 strReplace : String -> String -> String -> String
 strReplace needle replacement = pack . substitute (unpack needle) (unpack replacement) . unpack
