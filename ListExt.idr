@@ -5,28 +5,29 @@ module ListExt
 %default total
 %access public export
 
-splitOnL' : Eq a => (delim : List a)    -> {auto dprf : NonEmpty delim   }
-              -> (matching : List a) -> {auto mprf : NonEmpty matching}
-              -> List a -> (List a, List (List a))
-splitOnL' _ _ [] = ([], [])
-splitOnL' delim m@(_::m') list@(x::xs) =
-  if isPrefixOf m list
-  then
-    case m' of
-      [] => ([], uncurry (::) $ splitOnL' delim delim xs)
-      (m_ :: ms) => splitOnL' delim (m_ :: ms) xs
+splitOnSublist' : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
+                       -> (state : Maybe (List a))
+                       -> List a -> (List a, List (List a))
+splitOnSublist' _ _ [] = ([], [])
+splitOnSublist' delim (Just []) xs =
+  ([], uncurry (::) $ splitOnSublist' delim Nothing xs)
+splitOnSublist' delim (Just (_ :: ms)) (_::xs) =
+  splitOnSublist' delim (Just ms) xs
+splitOnSublist' delim Nothing list@(x::xs) =
+  if isPrefixOf delim list
+  then splitOnSublist' delim (Just delim) list
   else
-    let (l, ls) = splitOnL' delim delim xs in
-    (x :: l, ls)
+    let (l, ls) = splitOnSublist' delim Nothing xs
+    in (x :: l, ls)
 
-splitOnL : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
+splitOnSublist : Eq a => (delim : List a) -> {auto dprf : NonEmpty delim}
              -> List a -> List (List a)
-splitOnL delim [] = []
-splitOnL delim list@(_::_) = uncurry (::) $ splitOnL' delim delim list
+splitOnSublist delim [] = []
+splitOnSublist delim list@(_::_) = uncurry (::) $ splitOnSublist' delim Nothing list
 
 substitute : Eq a => List a -> List a -> List a -> List a
 substitute [] replacement = id
-substitute (n :: ns) replacement = intercalate replacement . splitOnL (n :: ns)
+substitute (n :: ns) replacement = intercalate replacement . splitOnSublist (n :: ns)
 
 strReplace : String -> String -> String -> String
 strReplace needle replacement = pack . substitute (unpack needle) (unpack replacement) . unpack
