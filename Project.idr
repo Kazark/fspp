@@ -5,8 +5,9 @@ module Project
 
 record GenModule where
   constructor GenMod
+  fileName : String
   moduleName : String
-  genExpr : String
+  genExpr : List String
 
 ||| Example:
 |||   templates
@@ -86,32 +87,41 @@ dropPlus1Smaller x (y :: xs) Z = lteRefl
 dropPlus1Smaller x (y :: ys) (S k) =
   LTESucc $ lteSuccLeft $ dropPlus1Smaller x ys k
 
+parseGenMods : List Token -> Either Error (List GenModule)
+parseGenMods toks = ?blargh
+
 step : (xs : List Token)
      -> ((ys : List Token) -> Smaller ys xs -> Project -> Either Error Project)
      -> Project -> Either Error Project
 step [] _ p = Right p
-step (todo :: xs) f p =
+step (x@(Z, "templates") :: xs) f p =
   let tmpls = map snd $ takeWhile ((== 1) . fst) xs
       p' = p <+> ofTmpl tmpls
       n = length tmpls
       rem = drop n xs in
-  f rem (dropPlus1Smaller todo xs n) p
+  f rem (dropPlus1Smaller x xs n) p
+step (x@(Z, "source") :: xs) f p =
+  let srcs = map snd $ takeWhile ((== 1) . fst) xs
+      p' = p <+> ofSrc srcs
+      n = length srcs
+      rem = drop n xs in
+  f rem (dropPlus1Smaller x xs n) p
+step (x@(Z, "generate") :: xs) f p =
+  let raw = takeWhile ((> 0) . fst) xs in
+  case parseGenMods raw of
+    Left e => Left e
+    Right genMods =>
+      let p' = p <+> ofGen genMods
+          n = length raw
+          rem = drop n xs in
+      f rem (dropPlus1Smaller x xs n) p
+step ((Z,  x) :: _) _ _ = Left $ UnrecognizedTopLevel x
+step ((S n,  x) :: _) _ _ = Left $ UnexpectedIndentation (S n) x
 
---partial
---parseToks : List Token -> Either Error Project
---parseToks toks = parseToks' neutral $ fromList toks where
---  partial
---  parseToks' : Project -> Vect n Token -> Either Error Project
---  parseToks' p [] = Right p
---  parseToks' {n=S n} p ((Z, "templates") :: xs) =
---    let ((k ** ts), (l ** rem)) = partition ((/= 1) . fst) xs
---        tmpls = map snd $ toList ts
---        p' = p <+> ofTmpl tmpls
---    in parseToks' p' rem
---  parseToks' p ((Z, "source") :: xs) = ?parseToks'_rhs_2
---  parseToks' p ((Z, "generate") :: xs) = ?parseToks'_rhs_2
---  parseToks' _ ((Z,  x) :: _) = Left $ UnrecognizedTopLevel x
---  parseToks' _ ((S n,  x) :: _) = Left $ UnexpectedIndentation (S n) x
+parseToks : List Token -> Either Error Project
+parseToks toks =
+  let addToProject = sizeRec step toks
+  in addToProject neutral
 
 parse : String -> Project
 parse x = ?parse_rhs
